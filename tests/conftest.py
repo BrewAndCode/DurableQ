@@ -1,4 +1,3 @@
-
 import os
 
 import pytest
@@ -11,8 +10,6 @@ def pytest_configure():
     test_database_url = os.getenv("TEST_DATABASE_URL")
 
     if not test_database_url:
-        raise pytest.UsageError(
-            "TEST_DATABASE_URL must be configured"
-        )
+        raise pytest.UsageError("TEST_DATABASE_URL must be configured")
 
     os.environ["DATABASE_URL"] = test_database_url

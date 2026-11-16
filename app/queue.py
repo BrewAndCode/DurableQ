@@ -1,5 +1,5 @@
 import random
-from datetime import datetime 
+from datetime import datetime
 
 from psycopg.types.json import Jsonb
 
@@ -14,12 +14,11 @@ def enqueue(
     run_at: datetime | None = None,
 ) -> tuple[int, str, str]:
 
-    # Validate inputs
     if not isinstance(job_type, str) or not job_type.strip():
         raise ValueError("job_type must be a non-empty string")
 
     if not isinstance(payload, dict):
-        raise ValueError("payload must be a dictionary")
+        raise TypeError("payload must be a dictionary")
 
     if (
         isinstance(max_attempts, bool)
@@ -28,17 +27,17 @@ def enqueue(
     ):
         raise ValueError("max_attempts must be a positive integer")
 
-    if idempotency_key is not None:
-        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
-            raise ValueError("idempotency_key must be a non-empty string")
+    if idempotency_key is not None and (
+        not isinstance(idempotency_key, str) or not idempotency_key.strip()
+    ):
+        raise ValueError("idempotency_key must be a non-empty string")
 
-    if run_at is not None:
-        if (
-            not isinstance(run_at, datetime)
-            or run_at.tzinfo is None
-            or run_at.utcoffset() is None
-        ):
-            raise ValueError("run_at must be a timezone-aware datetime")
+    if run_at is not None and (
+        not isinstance(run_at, datetime)
+        or run_at.tzinfo is None
+        or run_at.utcoffset() is None
+    ):
+        raise ValueError("run_at must be a timezone-aware datetime")
 
     query = """
         INSERT INTO jobs (
@@ -55,36 +54,33 @@ def enqueue(
         RETURNING id, job_type, status;
     """
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                query,
-                (
-                    job_type.strip(),
-                    Jsonb(payload),
-                    idempotency_key,
-                    max_attempts,
-                    run_at,
-                ),
-            )
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            query,
+            (
+                job_type.strip(),
+                Jsonb(payload),
+                idempotency_key,
+                max_attempts,
+                run_at,
+            ),
+        )
 
+        job = cur.fetchone()
+
+        if job is None and idempotency_key is not None:
+            cur.execute(
+                """
+                SELECT id, job_type, status
+                FROM jobs
+                WHERE idempotency_key = %s
+                """,
+                (idempotency_key,),
+            )
             job = cur.fetchone()
 
-            if job is None and idempotency_key is not None:
-                cur.execute(
-                    """
-                    SELECT id, job_type, status
-                    FROM jobs
-                    WHERE idempotency_key = %s
-                    """,
-                    (idempotency_key,),
-                )
-                job = cur.fetchone()
-
-                if job is None:
-                    raise RuntimeError(
-                        "Could not retrieve existing idempotent job"
-                    )
+    if job is None:
+        raise RuntimeError("Could not retrieve existing idempotent job")
 
     return job
 
@@ -94,7 +90,6 @@ def claim(
     visibility_timeout_seconds: int = 60,
 ) -> tuple | None:
 
-    # Validate inputs
     if not isinstance(worker_id, str) or not worker_id.strip():
         raise ValueError("worker_id must be a non-empty string")
 
@@ -130,8 +125,6 @@ def claim(
             ORDER BY visible_at, id
             LIMIT 1
             FOR UPDATE SKIP LOCKED
-            
-            
         )
         UPDATE jobs
         SET
@@ -144,15 +137,64 @@ def claim(
         RETURNING id, job_type, payload, attempts, visible_at;
     """
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                query,
-                (worker_id.strip(), visibility_timeout_seconds),
-            )
-            job = cur.fetchone()
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            query,
+            (worker_id.strip(), visibility_timeout_seconds),
+        )
+        job = cur.fetchone()
 
     return job
+
+
+def heartbeat(
+    job_id: int,
+    worker_id: str,
+    attempt: int,
+    visibility_timeout_seconds: int = 60,
+) -> bool:
+
+    if isinstance(job_id, bool) or not isinstance(job_id, int) or job_id < 1:
+        raise ValueError("job_id must be a positive integer")
+
+    if not isinstance(worker_id, str) or not worker_id.strip():
+        raise ValueError("worker_id must be a non-empty string")
+
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+        raise ValueError("attempt must be a positive integer")
+
+    if (
+        isinstance(visibility_timeout_seconds, bool)
+        or not isinstance(visibility_timeout_seconds, int)
+        or visibility_timeout_seconds < 1
+    ):
+        raise ValueError("visibility_timeout_seconds must be a positive integer")
+
+    query = """
+        UPDATE jobs
+        SET
+            visible_at = NOW() + (%s * INTERVAL '1 second'),
+            updated_at = NOW()
+        WHERE id = %s
+          AND attempts = %s
+          AND status = 'running'
+          AND worker_id = %s;
+    """
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            query,
+            (
+                visibility_timeout_seconds,
+                job_id,
+                attempt,
+                worker_id.strip(),
+            ),
+        )
+        updated = cur.rowcount == 1
+
+    return updated
+
 
 def complete(
     job_id: int,
@@ -182,14 +224,15 @@ def complete(
           AND worker_id = %s;
     """
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                query,
-                (job_id, attempt, worker_id.strip()),
-            )
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            query,
+            (job_id, attempt, worker_id.strip()),
+        )
+        updated = cur.rowcount == 1
 
-            return cur.rowcount == 1
+    return updated
+
 
 def fail(
     job_id: int,
@@ -224,9 +267,7 @@ def fail(
         or not isinstance(max_delay_seconds, int)
         or max_delay_seconds < base_delay_seconds
     ):
-        raise ValueError(
-            "max_delay_seconds must be >= base_delay_seconds"
-        )
+        raise ValueError("max_delay_seconds must be >= base_delay_seconds")
 
     exponential_delay = min(
         max_delay_seconds,
@@ -258,18 +299,17 @@ def fail(
           AND worker_id = %s;
     """
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                query,
-                (
-                    retry_delay,
-                    error,
-                    job_id,
-                    attempt,
-                    worker_id.strip(),
-                ),
-            )
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            query,
+            (
+                retry_delay,
+                error,
+                job_id,
+                attempt,
+                worker_id.strip(),
+            ),
+        )
+        updated = cur.rowcount == 1
 
-            return cur.rowcount == 1
-
+    return updated
