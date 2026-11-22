@@ -1,4 +1,3 @@
-
 CREATE TABLE jobs (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
@@ -31,13 +30,34 @@ CREATE TABLE jobs (
         CHECK (max_attempts >= 1),
 
     CONSTRAINT valid_job_type
-        CHECK (length(trim(job_type)) > 0)
+        CHECK (length(trim(job_type)) > 0),
+
+    CONSTRAINT valid_worker_assignment
+        CHECK (
+            (status = 'running'
+                AND worker_id IS NOT NULL
+                AND length(trim(worker_id)) > 0)
+            OR
+            (status != 'running' AND worker_id IS NULL)
+        ),
+
+    CONSTRAINT valid_completion_timestamp
+        CHECK (
+            (status = 'completed' AND completed_at IS NOT NULL)
+            OR
+            (status != 'completed' AND completed_at IS NULL)
+        ),
+
+    CONSTRAINT valid_payload
+        CHECK (jsonb_typeof(payload) = 'object')
 );
+
 
 -- Prevent duplicate enqueue requests
 CREATE UNIQUE INDEX idx_jobs_idempotency
 ON jobs (idempotency_key)
 WHERE idempotency_key IS NOT NULL;
+
 
 -- Find available jobs efficiently
 CREATE INDEX idx_jobs_available

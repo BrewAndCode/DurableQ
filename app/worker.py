@@ -1,19 +1,39 @@
 import logging
 import math
+import re
 import signal
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from app.queue import claim, complete, fail, heartbeat
 
 logger = logging.getLogger(__name__)
+
+HEARTBEAT_THREAD_JOIN_TIMEOUT_SECONDS = 12
+
+
+def _safe_exception_type(exc: Exception) -> str:
+    name = re.sub(r"[^A-Za-z0-9_]", "", type(exc).__name__)[:64]
+    return name or "Exception"
+
+
+def _safe_handler_error(exc: Exception) -> str:
+    return f"Handler raised {_safe_exception_type(exc)}; message and traceback omitted."
+
+
+@dataclass(frozen=True)
+class CancellableHandler:
+    """Wrap a handler that cooperatively observes its cancellation event."""
+
+    callback: Callable[[dict, threading.Event], None]
 
 
 class Worker:
     def __init__(
         self,
         worker_id: str,
-        handlers: dict[str, Callable],
+        handlers: dict[str, Callable | CancellableHandler],
         poll_interval_seconds: float = 1,
         visibility_timeout_seconds: int = 60,
     ):
@@ -50,6 +70,7 @@ class Worker:
         attempt: int,
         stop_event: threading.Event,
         lease_lost: threading.Event,
+        cancellation_event: threading.Event,
     ):
         interval = max(0.1, self.visibility_timeout_seconds / 3)
 
@@ -63,13 +84,19 @@ class Worker:
                 )
 
                 if not renewed:
-                    logger.warning("Lease lost for job %s", job_id)
                     lease_lost.set()
+                    cancellation_event.set()
+                    logger.warning("Lease lost for job %s", job_id)
                     return
 
-            except Exception:
-                logger.exception("Heartbeat failed for job %s", job_id)
+            except Exception as exc:
                 lease_lost.set()
+                cancellation_event.set()
+                logger.warning(
+                    "Heartbeat failed for job %s (%s)",
+                    job_id,
+                    _safe_exception_type(exc),
+                )
                 return
 
     def run_once(self) -> bool:
@@ -89,10 +116,17 @@ class Worker:
 
         heartbeat_stop = threading.Event()
         lease_lost = threading.Event()
+        cancellation_event = threading.Event()
 
         heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
-            args=(job_id, attempt, heartbeat_stop, lease_lost),
+            args=(
+                job_id,
+                attempt,
+                heartbeat_stop,
+                lease_lost,
+                cancellation_event,
+            ),
             daemon=True,
         )
 
@@ -103,26 +137,48 @@ class Worker:
             if handler is None:
                 raise ValueError(f"No handler registered for job type: {job_type}")
 
-            handler(payload)
+            if isinstance(handler, CancellableHandler):
+                handler.callback(payload, cancellation_event)
+            else:
+                handler(payload)
 
         except Exception as exc:
-            handler_error = exc
-            logger.exception("Job %s failed", job_id)
+            handler_error = _safe_handler_error(exc)
+            logger.error(
+                "Job %s handler raised %s; message and traceback omitted",
+                job_id,
+                _safe_exception_type(exc),
+            )
 
         finally:
             heartbeat_stop.set()
-            heartbeat_thread.join()
+            heartbeat_thread.join(timeout=HEARTBEAT_THREAD_JOIN_TIMEOUT_SECONDS)
+            if heartbeat_thread.is_alive():
+                logger.warning(
+                    "Heartbeat operation for job %s did not stop before the "
+                    "join deadline",
+                    job_id,
+                )
 
         if lease_lost.is_set():
-            logger.warning("Job %s may have lost its lease", job_id)
+            logger.warning(
+                "Job %s lost its lease; skipping completion or failure update",
+                job_id,
+            )
+            return True
 
         if handler_error is not None:
-            fail(
+            failed = fail(
                 job_id=job_id,
                 worker_id=self.worker_id,
                 attempt=attempt,
-                error=str(handler_error),
+                error=handler_error,
             )
+            if not failed:
+                logger.warning(
+                    "Job %s failure update rejected by lease or fencing checks",
+                    job_id,
+                )
             return True
 
         completed = complete(
@@ -133,7 +189,7 @@ class Worker:
 
         if not completed:
             logger.warning(
-                "Job %s completion rejected (stale attempt)",
+                "Job %s completion rejected by lease or fencing checks",
                 job_id,
             )
 

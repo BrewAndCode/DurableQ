@@ -1,0 +1,649 @@
+{
+  "generated_at_utc": "2026-11-22T13:30:27.620596+00:00",
+  "database_name": "durableq_bench_20261122185244",
+  "database_host": "loopback allowlist",
+  "environment": {
+    "benchmark_process": {
+      "os": "Linux-7.0.14-linuxkit-aarch64-with-glibc2.41",
+      "machine": "aarch64",
+      "cpu_model": "aarch64",
+      "logical_cpu_count": 8,
+      "host_memory_bytes": 4106604544,
+      "python_version": "3.13.18",
+      "docker_server_version": "29.9.2"
+    },
+    "host": {
+      "os": "macOS-27.0-arm64-arm-64bit-Mach-O",
+      "machine": "arm64",
+      "cpu_model": "Apple M1",
+      "logical_cpu_count": 8,
+      "host_memory_bytes": 8589934592
+    },
+    "postgresql": {
+      "version_text": "PostgreSQL 16.16 (Debian 16.16-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "server_version": "16.16 (Debian 16.16-1.pgdg13+1)",
+      "settings": {
+        "checkpoint_timeout": {
+          "setting": "300",
+          "unit": "s"
+        },
+        "effective_cache_size": {
+          "setting": "524288",
+          "unit": "8kB"
+        },
+        "fsync": {
+          "setting": "on",
+          "unit": null
+        },
+        "full_page_writes": {
+          "setting": "on",
+          "unit": null
+        },
+        "max_connections": {
+          "setting": "100",
+          "unit": null
+        },
+        "max_wal_size": {
+          "setting": "1024",
+          "unit": "MB"
+        },
+        "shared_buffers": {
+          "setting": "16384",
+          "unit": "8kB"
+        },
+        "synchronous_commit": {
+          "setting": "on",
+          "unit": null
+        },
+        "wal_compression": {
+          "setting": "off",
+          "unit": null
+        },
+        "work_mem": {
+          "setting": "4096",
+          "unit": "kB"
+        }
+      },
+      "container_name": "durableq-bench-pg16-20261122185244",
+      "container_memory_and_cpu_limits": "memory_bytes=0 nano_cpus=0",
+      "data_directory_storage": "tmpfs at /var/lib/postgresql/data (2 GiB configured)"
+    }
+  },
+  "workload": {
+    "job_type": "demo.log",
+    "handler": "app.handlers.handle_demo_log",
+    "payload": {
+      "message": "DurableQ reproducible benchmark payload v1"
+    },
+    "payload_json_bytes": 57,
+    "enqueue_sizes": [
+      1000,
+      5000,
+      10000
+    ],
+    "worker_jobs_per_run": 5000,
+    "worker_concurrency": [
+      1,
+      5,
+      10,
+      20
+    ],
+    "repetitions": 3,
+    "warmup_jobs_per_case": 100,
+    "migrations_applied_during_setup": [
+      "001_initial_schema",
+      "002_job_state_constraints"
+    ],
+    "schema_versions_after_setup": [
+      "001_initial_schema",
+      "002_job_state_constraints"
+    ],
+    "schema_setup_seconds_excluded": 0.06247649999932037,
+    "final_cleanup_seconds_excluded": 0.003331749998324085,
+    "latency_definition": "jobs.completed_at - jobs.created_at using PostgreSQL timestamps",
+    "worker_throughput_definition": "all jobs completed, measured from worker thread startup to database observer confirmation",
+    "enqueue_throughput_definition": "public enqueue() calls completed per second; per-job connection and transaction costs included",
+    "correctness_definition": "every expected job row completed and had attempts=1; attempts>1 counts duplicate claim attempts",
+    "worker_poll_interval_seconds": 0.005,
+    "worker_visibility_timeout_seconds": 300,
+    "database_observer_poll_interval_seconds": 0.01
+  },
+  "enqueue_throughput": [
+    {
+      "jobs": 1000,
+      "runs": [
+        {
+          "repetition": 1,
+          "jobs": 1000,
+          "elapsed_seconds": 2.643008209999607,
+          "jobs_per_second": 378.35675130201304,
+          "setup_seconds_excluded": 0.01869879199875868,
+          "warmup_seconds_excluded": 0.37375520799832884,
+          "cleanup_seconds_excluded": 0.003023207998921862,
+          "correctness": {
+            "rows": 1000,
+            "unique_idempotency_keys": 1000,
+            "queued_jobs": 1000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        },
+        {
+          "repetition": 2,
+          "jobs": 1000,
+          "elapsed_seconds": 2.41260583499934,
+          "jobs_per_second": 414.4895885988245,
+          "setup_seconds_excluded": 0.0059317079994798405,
+          "warmup_seconds_excluded": 0.24574550000033923,
+          "cleanup_seconds_excluded": 0.002727499999309657,
+          "correctness": {
+            "rows": 1000,
+            "unique_idempotency_keys": 1000,
+            "queued_jobs": 1000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        },
+        {
+          "repetition": 3,
+          "jobs": 1000,
+          "elapsed_seconds": 2.6220512930012774,
+          "jobs_per_second": 381.3807924616801,
+          "setup_seconds_excluded": 0.007584249999126769,
+          "warmup_seconds_excluded": 0.308742417000758,
+          "cleanup_seconds_excluded": 0.0033416659989597974,
+          "correctness": {
+            "rows": 1000,
+            "unique_idempotency_keys": 1000,
+            "queued_jobs": 1000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        }
+      ],
+      "median_jobs_per_second": 381.3807924616801
+    },
+    {
+      "jobs": 5000,
+      "runs": [
+        {
+          "repetition": 1,
+          "jobs": 5000,
+          "elapsed_seconds": 11.31073671300146,
+          "jobs_per_second": 442.0578541318712,
+          "setup_seconds_excluded": 0.005792251000457327,
+          "warmup_seconds_excluded": 0.23486554200098908,
+          "cleanup_seconds_excluded": 0.0033200000016222475,
+          "correctness": {
+            "rows": 5000,
+            "unique_idempotency_keys": 5000,
+            "queued_jobs": 5000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        },
+        {
+          "repetition": 2,
+          "jobs": 5000,
+          "elapsed_seconds": 10.741940504000013,
+          "jobs_per_second": 465.46524793524344,
+          "setup_seconds_excluded": 0.005643000002237386,
+          "warmup_seconds_excluded": 0.19697458399969037,
+          "cleanup_seconds_excluded": 0.004096333999768831,
+          "correctness": {
+            "rows": 5000,
+            "unique_idempotency_keys": 5000,
+            "queued_jobs": 5000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        },
+        {
+          "repetition": 3,
+          "jobs": 5000,
+          "elapsed_seconds": 10.627794588999677,
+          "jobs_per_second": 470.46449365659186,
+          "setup_seconds_excluded": 0.006431790998249198,
+          "warmup_seconds_excluded": 0.22659895899960247,
+          "cleanup_seconds_excluded": 0.0036813750011788215,
+          "correctness": {
+            "rows": 5000,
+            "unique_idempotency_keys": 5000,
+            "queued_jobs": 5000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        }
+      ],
+      "median_jobs_per_second": 465.46524793524344
+    },
+    {
+      "jobs": 10000,
+      "runs": [
+        {
+          "repetition": 1,
+          "jobs": 10000,
+          "elapsed_seconds": 21.200463051000042,
+          "jobs_per_second": 471.68781058903767,
+          "setup_seconds_excluded": 0.00581308400069247,
+          "warmup_seconds_excluded": 0.20244716699926357,
+          "cleanup_seconds_excluded": 0.004105415999219986,
+          "correctness": {
+            "rows": 10000,
+            "unique_idempotency_keys": 10000,
+            "queued_jobs": 10000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        },
+        {
+          "repetition": 2,
+          "jobs": 10000,
+          "elapsed_seconds": 21.283287718000793,
+          "jobs_per_second": 469.85222078928564,
+          "setup_seconds_excluded": 0.00555766700017557,
+          "warmup_seconds_excluded": 0.22946895900167874,
+          "cleanup_seconds_excluded": 0.00348649999978079,
+          "correctness": {
+            "rows": 10000,
+            "unique_idempotency_keys": 10000,
+            "queued_jobs": 10000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        },
+        {
+          "repetition": 3,
+          "jobs": 10000,
+          "elapsed_seconds": 21.641146926000147,
+          "jobs_per_second": 462.08271836026313,
+          "setup_seconds_excluded": 0.00553349999790953,
+          "warmup_seconds_excluded": 0.1962520829983987,
+          "cleanup_seconds_excluded": 0.003702500000144937,
+          "correctness": {
+            "rows": 10000,
+            "unique_idempotency_keys": 10000,
+            "queued_jobs": 10000,
+            "lost_jobs": 0,
+            "unexpected_jobs": 0
+          }
+        }
+      ],
+      "median_jobs_per_second": 469.85222078928564
+    }
+  ],
+  "worker_concurrency": [
+    {
+      "workers": 1,
+      "jobs_per_run": 5000,
+      "runs": [
+        {
+          "repetition": 1,
+          "workers": 1,
+          "jobs": 5000,
+          "elapsed_seconds": 30.370466973001385,
+          "completed_jobs_per_second": 164.63362267181734,
+          "shutdown_seconds_excluded": 0.0008317080009874189,
+          "latency_ms": {
+            "p50": 20940.0575,
+            "p95": 29453.64285,
+            "p99": 30185.214040000003,
+            "mean": 20826.077125
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.8635124169995834,
+          "setup_seconds_excluded": 0.0032714589997340227,
+          "preload_seconds_excluded": 10.68834367099953,
+          "cleanup_seconds_excluded": 0.003906500000084634
+        },
+        {
+          "repetition": 2,
+          "workers": 1,
+          "jobs": 5000,
+          "elapsed_seconds": 30.690345179998985,
+          "completed_jobs_per_second": 162.91768537222316,
+          "shutdown_seconds_excluded": 0.00010750000001280569,
+          "latency_ms": {
+            "p50": 21136.8545,
+            "p95": 29783.3324,
+            "p99": 30479.702719999997,
+            "mean": 20954.2830008
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.7958000839989836,
+          "setup_seconds_excluded": 0.0033952919984585606,
+          "preload_seconds_excluded": 10.64742588000081,
+          "cleanup_seconds_excluded": 0.005612582999674487
+        },
+        {
+          "repetition": 3,
+          "workers": 1,
+          "jobs": 5000,
+          "elapsed_seconds": 30.62161343000116,
+          "completed_jobs_per_second": 163.28336230321912,
+          "shutdown_seconds_excluded": 0.0007984999992913799,
+          "latency_ms": {
+            "p50": 20739.491,
+            "p95": 29671.1158,
+            "p99": 30421.084029999998,
+            "mean": 20721.7725476
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.8662785429987707,
+          "setup_seconds_excluded": 0.003061250001337612,
+          "preload_seconds_excluded": 10.478637463000268,
+          "cleanup_seconds_excluded": 0.004233834000842762
+        }
+      ],
+      "median_completed_jobs_per_second": 163.28336230321912,
+      "median_latency_ms": {
+        "p50": 20940.0575,
+        "p95": 29671.1158,
+        "p99": 30421.084029999998
+      }
+    },
+    {
+      "workers": 5,
+      "jobs_per_run": 5000,
+      "runs": [
+        {
+          "repetition": 1,
+          "workers": 5,
+          "jobs": 5000,
+          "elapsed_seconds": 12.149463880999974,
+          "completed_jobs_per_second": 411.5407929908155,
+          "shutdown_seconds_excluded": 0.002812542001265683,
+          "latency_ms": {
+            "p50": 11321.822,
+            "p95": 12028.2311,
+            "p99": 12093.45822,
+            "mean": 11315.2494438
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.4274766680009634,
+          "setup_seconds_excluded": 0.0027802090007753577,
+          "preload_seconds_excluded": 10.511559380000108,
+          "cleanup_seconds_excluded": 0.003898082999512553
+        },
+        {
+          "repetition": 2,
+          "workers": 5,
+          "jobs": 5000,
+          "elapsed_seconds": 12.600586256001407,
+          "completed_jobs_per_second": 396.80693409154674,
+          "shutdown_seconds_excluded": 0.0017488330013293307,
+          "latency_ms": {
+            "p50": 11563.8725,
+            "p95": 12449.01125,
+            "p99": 12578.08945,
+            "mean": 11549.902455200001
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.47324420800032385,
+          "setup_seconds_excluded": 0.00289804200110666,
+          "preload_seconds_excluded": 10.715953463000915,
+          "cleanup_seconds_excluded": 0.0043664170007104985
+        },
+        {
+          "repetition": 3,
+          "workers": 5,
+          "jobs": 5000,
+          "elapsed_seconds": 13.373625088999688,
+          "completed_jobs_per_second": 373.87020846821025,
+          "shutdown_seconds_excluded": 0.003353582998897764,
+          "latency_ms": {
+            "p50": 12028.910499999998,
+            "p95": 13214.2425,
+            "p99": 13340.05429,
+            "mean": 11984.774965
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.4510504999998375,
+          "setup_seconds_excluded": 0.0034312919997319113,
+          "preload_seconds_excluded": 10.558931505000146,
+          "cleanup_seconds_excluded": 0.004684457999246661
+        }
+      ],
+      "median_completed_jobs_per_second": 396.80693409154674,
+      "median_latency_ms": {
+        "p50": 11563.8725,
+        "p95": 12449.01125,
+        "p99": 12578.08945
+      }
+    },
+    {
+      "workers": 10,
+      "jobs_per_run": 5000,
+      "runs": [
+        {
+          "repetition": 1,
+          "workers": 10,
+          "jobs": 5000,
+          "elapsed_seconds": 14.64572084000065,
+          "completed_jobs_per_second": 341.3966478415943,
+          "shutdown_seconds_excluded": 0.0067950419997941935,
+          "latency_ms": {
+            "p50": 12674.3095,
+            "p95": 14470.9044,
+            "p99": 14597.430800000002,
+            "mean": 12658.0617104
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.5150536250002915,
+          "setup_seconds_excluded": 0.002965542000310961,
+          "preload_seconds_excluded": 10.539796504999686,
+          "cleanup_seconds_excluded": 0.0043606250001175795
+        },
+        {
+          "repetition": 2,
+          "workers": 10,
+          "jobs": 5000,
+          "elapsed_seconds": 14.255234173000645,
+          "completed_jobs_per_second": 350.74835946714785,
+          "shutdown_seconds_excluded": 0.0052147500009596115,
+          "latency_ms": {
+            "p50": 12348.0095,
+            "p95": 14052.36165,
+            "p99": 14206.936220000001,
+            "mean": 12378.9933132
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.4969947920017148,
+          "setup_seconds_excluded": 0.0032962499990389915,
+          "preload_seconds_excluded": 10.607779588000994,
+          "cleanup_seconds_excluded": 0.00468820800051617
+        },
+        {
+          "repetition": 3,
+          "workers": 10,
+          "jobs": 5000,
+          "elapsed_seconds": 14.437447756999973,
+          "completed_jobs_per_second": 346.3215995067936,
+          "shutdown_seconds_excluded": 0.004378167001050315,
+          "latency_ms": {
+            "p50": 12601.5045,
+            "p95": 14229.30985,
+            "p99": 14393.370330000002,
+            "mean": 12529.5876514
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.5510869169993384,
+          "setup_seconds_excluded": 0.0032619170015095733,
+          "preload_seconds_excluded": 10.591240088000632,
+          "cleanup_seconds_excluded": 0.004648249998354004
+        }
+      ],
+      "median_completed_jobs_per_second": 346.3215995067936,
+      "median_latency_ms": {
+        "p50": 12601.5045,
+        "p95": 14229.30985,
+        "p99": 14393.370330000002
+      }
+    },
+    {
+      "workers": 20,
+      "jobs_per_run": 5000,
+      "runs": [
+        {
+          "repetition": 1,
+          "workers": 20,
+          "jobs": 5000,
+          "elapsed_seconds": 14.115189256999656,
+          "completed_jobs_per_second": 354.2283357993605,
+          "shutdown_seconds_excluded": 0.01195575000019744,
+          "latency_ms": {
+            "p50": 12495.224,
+            "p95": 13922.36835,
+            "p99": 14073.335780000001,
+            "mean": 12474.278790600001
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.5318655840001156,
+          "setup_seconds_excluded": 0.003744666000784491,
+          "preload_seconds_excluded": 10.714848003999577,
+          "cleanup_seconds_excluded": 0.005328250001184642
+        },
+        {
+          "repetition": 2,
+          "workers": 20,
+          "jobs": 5000,
+          "elapsed_seconds": 14.699365173999468,
+          "completed_jobs_per_second": 340.1507439820667,
+          "shutdown_seconds_excluded": 0.007565415999124525,
+          "latency_ms": {
+            "p50": 12859.612,
+            "p95": 14463.039850000003,
+            "p99": 14660.202319999999,
+            "mean": 12720.0331714
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.5472678340011043,
+          "setup_seconds_excluded": 0.0031085840000741882,
+          "preload_seconds_excluded": 10.483741171001384,
+          "cleanup_seconds_excluded": 0.004456209000636591
+        },
+        {
+          "repetition": 3,
+          "workers": 20,
+          "jobs": 5000,
+          "elapsed_seconds": 14.417392506000397,
+          "completed_jobs_per_second": 346.8033486581601,
+          "shutdown_seconds_excluded": 0.009059207999598584,
+          "latency_ms": {
+            "p50": 12238.329999999998,
+            "p95": 14225.003899999998,
+            "p99": 14362.463280000002,
+            "mean": 12371.7178612
+          },
+          "correctness": {
+            "expected_jobs": 5000,
+            "observed_jobs": 5000,
+            "completed_jobs": 5000,
+            "lost_jobs": 0,
+            "duplicate_claims": 0,
+            "jobs_with_attempt_count_other_than_one": 0,
+            "incorrect_states": 0
+          },
+          "warmup_seconds_excluded": 0.5744914160004555,
+          "setup_seconds_excluded": 0.0034307909991184715,
+          "preload_seconds_excluded": 10.520201963001455,
+          "cleanup_seconds_excluded": 0.004230750000715489
+        }
+      ],
+      "median_completed_jobs_per_second": 346.8033486581601,
+      "median_latency_ms": {
+        "p50": 12495.224,
+        "p95": 14225.003899999998,
+        "p99": 14362.463280000002
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:?Set POSTGRES_DB in .env}"
+      POSTGRES_USER: "${POSTGRES_USER:?Set POSTGRES_USER in .env}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    volumes:
+      - durableq_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migrate:
+    image: durableq:local
+    build: .
+    restart: "no"
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?Set DATABASE_URL in .env}"
+    command:
+      - python
+      - -c
+      - from app.migrate import run_migrations; run_migrations()
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    image: durableq:local
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 2m
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?Set DATABASE_URL in .env}"
+      WORKER_ID: "${WORKER_ID:-durableq-worker}"
+      POLL_INTERVAL_SECONDS: "${POLL_INTERVAL_SECONDS:-1}"
+      VISIBILITY_TIMEOUT_SECONDS: "${VISIBILITY_TIMEOUT_SECONDS:-60}"
+    command: ["python", "-m", "app.worker_cli"]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  durableq_postgres_data:

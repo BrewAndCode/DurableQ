@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560" role="img" aria-labelledby="title desc">
+<title id="title">DurableQ enqueue throughput</title>
+<desc id="desc">Median jobs enqueued per second by batch size. Dots show individual measured repetitions.</desc>
+<rect width="1120" height="560" rx="16" fill="#ffffff"/>
+<style>text{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}</style>
+<text x="60" y="52" font-size="28" fill="#172b4d" text-anchor="start" font-weight="bold">Enqueue throughput</text>
+<text x="60" y="82" font-size="16" fill="#526581" text-anchor="start" font-weight="normal">Public enqueue API · median of measured runs; dots show each run</text>
+<line x1="130" y1="135" x2="130" y2="440" stroke="#d8e0eb"/>
+<text x="130" y="468" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">0</text>
+<line x1="304" y1="135" x2="304" y2="440" stroke="#d8e0eb"/>
+<text x="304" y="468" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">100</text>
+<line x1="478" y1="135" x2="478" y2="440" stroke="#d8e0eb"/>
+<text x="478" y="468" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">200</text>
+<line x1="652" y1="135" x2="652" y2="440" stroke="#d8e0eb"/>
+<text x="652" y="468" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">300</text>
+<line x1="826" y1="135" x2="826" y2="440" stroke="#d8e0eb"/>
+<text x="826" y="468" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">400</text>
+<line x1="1000" y1="135" x2="1000" y2="440" stroke="#d8e0eb"/>
+<text x="1000" y="468" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">500</text>
+<text x="110" y="191.83" font-size="17" fill="#172b4d" text-anchor="end" font-weight="bold">1,000 jobs</text>
+<rect x="130" y="164.83" width="663.6" height="42" rx="8" fill="#dce8ff"/>
+<circle cx="788.34" cy="173.83" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="851.21" cy="185.83" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="793.6" cy="197.83" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<line x1="793.6" y1="162.83" x2="793.6" y2="208.83" stroke="#7253b5" stroke-width="3"/>
+<text x="808.6" y="191.83" font-size="15" fill="#7253b5" text-anchor="start" font-weight="bold">median 381.38</text>
+<text x="110" y="293.5" font-size="17" fill="#172b4d" text-anchor="end" font-weight="bold">5,000 jobs</text>
+<rect x="130" y="266.5" width="809.91" height="42" rx="8" fill="#dce8ff"/>
+<circle cx="899.18" cy="275.5" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="939.91" cy="287.5" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="948.61" cy="299.5" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<line x1="939.91" y1="264.5" x2="939.91" y2="310.5" stroke="#7253b5" stroke-width="3"/>
+<text x="954.91" y="293.5" font-size="15" fill="#7253b5" text-anchor="start" font-weight="bold">median 465.47</text>
+<text x="110" y="395.17" font-size="17" fill="#172b4d" text-anchor="end" font-weight="bold">10,000 jobs</text>
+<rect x="130" y="368.17" width="817.54" height="42" rx="8" fill="#dce8ff"/>
+<circle cx="950.74" cy="377.17" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="947.54" cy="389.17" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="934.02" cy="401.17" r="6" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<line x1="947.54" y1="366.17" x2="947.54" y2="412.17" stroke="#7253b5" stroke-width="3"/>
+<text x="962.54" y="395.17" font-size="15" fill="#7253b5" text-anchor="start" font-weight="bold">median 469.85</text>
+<text x="565" y="500" font-size="17" fill="#172b4d" text-anchor="middle" font-weight="bold">Enqueue throughput (jobs/second)</text>
+<circle cx="330" cy="535" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<text x="344" y="540" font-size="14" fill="#526581" text-anchor="start" font-weight="normal">individual run</text>
+<line x1="500" y1="529" x2="500" y2="541" stroke="#7253b5" stroke-width="3"/>
+<text x="512" y="540" font-size="14" fill="#526581" text-anchor="start" font-weight="normal">median</text>
+</svg>

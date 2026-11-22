@@ -1,7 +1,10 @@
+import psycopg
 import os
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -26,6 +29,33 @@ def clean_jobs_table():
 
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE TABLE jobs RESTART IDENTITY")
+
+
+def _expire_job(job_id):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE jobs
+            SET visible_at = clock_timestamp() - INTERVAL '1 second'
+            WHERE id = %s
+            RETURNING visible_at
+            """,
+            (job_id,),
+        )
+        return cur.fetchone()[0]
+
+
+def _lease_job_state(job_id):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT status, attempts, worker_id, last_error, completed_at, visible_at
+            FROM jobs
+            WHERE id = %s
+            """,
+            (job_id,),
+        )
+        return cur.fetchone()
 
 
 def test_enqueue_creates_job(idempotency_key):
@@ -249,6 +279,69 @@ def test_exhausted_job_moves_to_dead(idempotency_key):
     assert result == ("dead", 1)
 
 
+def test_claim_skips_locked_exhausted_job_and_claims_eligible_job(
+    monkeypatch,
+):
+    exhausted_job = enqueue("send_email", {"user_id": 104}, max_attempts=1)
+    eligible_job = enqueue("send_email", {"user_id": 105})
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE jobs
+            SET attempts = max_attempts,
+                visible_at = clock_timestamp() - INTERVAL '1 second'
+            WHERE id = %s
+            """,
+            (exhausted_job[0],),
+        )
+
+    original_get_connection = queue_module.get_connection
+    claim_connection_ready = threading.Event()
+
+    def tracked_connection():
+        conn = original_get_connection()
+        claim_connection_ready.set()
+        return conn
+
+    monkeypatch.setattr(queue_module, "get_connection", tracked_connection)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with get_connection() as lock_conn:
+            with lock_conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM jobs WHERE id = %s FOR UPDATE",
+                    (exhausted_job[0],),
+                )
+                assert cur.fetchone() == (exhausted_job[0],)
+
+            claim_future = executor.submit(claim, "available-worker")
+            assert claim_connection_ready.wait(timeout=3)
+
+            try:
+                claimed_job = claim_future.result(timeout=5)
+                completed_before_unlock = True
+            except FutureTimeout:
+                claimed_job = None
+                completed_before_unlock = False
+
+        # Release the row lock before waiting again, so a regression fails
+        # cleanly instead of leaving a blocked worker thread behind.
+        if not completed_before_unlock:
+            claim_future.result(timeout=5)
+
+    assert completed_before_unlock
+    assert claimed_job[0] == eligible_job[0]
+
+    assert claim("cleanup-worker") is None
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT status FROM jobs WHERE id = %s",
+            (exhausted_job[0],),
+        )
+        assert cur.fetchone() == ("dead",)
+
+
 def test_concurrent_workers_claim_each_job_once():
     total_jobs = 100
     total_workers = 20
@@ -296,39 +389,17 @@ def test_complete_marks_job_as_completed(idempotency_key):
     job = claim("worker-1")
     assert job is not None
 
-    print("CLAIMED JOB:", job)
-
-    # Inspect database state before completion.
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT id, status, worker_id, attempts
-            FROM jobs
-            WHERE id = %s
-            """,
+            "UPDATE jobs SET visible_at = clock_timestamp() + INTERVAL '1 hour' WHERE id = %s",
             (job[0],),
         )
-        print("DATABASE STATE BEFORE:", cur.fetchone())
 
     result = complete(
         job_id=job[0],
         worker_id="worker-1",
         attempt=job[3],
     )
-
-    print("COMPLETE RESULT:", result)
-
-    # Inspect database state after completion.
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, status, worker_id, attempts
-            FROM jobs
-            WHERE id = %s
-            """,
-            (job[0],),
-        )
-        print("DATABASE STATE AFTER:", cur.fetchone())
 
     assert result is True
 
@@ -346,6 +417,24 @@ def test_complete_marks_job_as_completed(idempotency_key):
     assert status == "completed"
     assert worker_id is None
     assert completed_at is not None
+
+
+def test_complete_rejects_expired_lease_without_reclaim(idempotency_key):
+    enqueue("send_email", {"user_id": 106}, idempotency_key)
+    job = claim("worker-1")
+    assert job is not None
+
+    expired_at = _expire_job(job[0])
+
+    assert complete(job[0], "worker-1", job[3]) is False
+    assert _lease_job_state(job[0]) == (
+        "running",
+        job[3],
+        "worker-1",
+        None,
+        None,
+        expired_at,
+    )
 
 
 def test_stale_worker_cannot_complete_job(idempotency_key):
@@ -420,6 +509,155 @@ def test_fail_schedules_retry(idempotency_key):
     assert worker_id is None
     assert last_error == "Email service unavailable"
     assert is_delayed is True
+
+
+def test_retry_delay_progression_stops_at_maximum_cap(
+    idempotency_key, monkeypatch
+):
+    job = enqueue(
+        "send_email",
+        {"user_id": 107},
+        idempotency_key,
+        max_attempts=5,
+    )
+    observed_bounds = []
+
+    def choose_midpoint(lower, upper):
+        observed_bounds.append((lower, upper))
+        return (lower + upper) / 2
+
+    monkeypatch.setattr(queue_module.random, "uniform", choose_midpoint)
+    expected_exponential_delays = [2, 4, 8, 10, 10]
+
+    for attempt_number, expected_delay in enumerate(
+        expected_exponential_delays,
+        start=1,
+    ):
+        claimed = claim(f"retry-worker-{attempt_number}")
+        assert claimed is not None
+        assert claimed[0] == job[0]
+        assert claimed[3] == attempt_number
+
+        assert fail(
+            claimed[0],
+            f"retry-worker-{attempt_number}",
+            claimed[3],
+            "temporary failure",
+            base_delay_seconds=2,
+            max_delay_seconds=10,
+        ) is True
+
+        assert observed_bounds[-1] == (
+            expected_delay / 2,
+            expected_delay,
+        )
+
+        if attempt_number < len(expected_exponential_delays):
+            with get_connection() as conn, conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE jobs
+                    SET visible_at = clock_timestamp() - INTERVAL '1 second'
+                    WHERE id = %s
+                    """,
+                    (job[0],),
+                )
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT status, attempts FROM jobs WHERE id = %s", (job[0],))
+        assert cur.fetchone() == ("dead", 5)
+
+
+@pytest.mark.parametrize("jitter_edge", ["lower", "upper"])
+def test_retry_jitter_persists_within_exponential_bounds(
+    idempotency_key, monkeypatch, jitter_edge
+):
+    job = enqueue("send_email", {"user_id": 108}, idempotency_key)
+    claimed = claim("jitter-worker")
+    assert claimed is not None
+    bounds = []
+
+    def choose_edge(lower, upper):
+        bounds.append((lower, upper))
+        return lower if jitter_edge == "lower" else upper
+
+    monkeypatch.setattr(queue_module.random, "uniform", choose_edge)
+
+    assert fail(
+        claimed[0],
+        "jitter-worker",
+        claimed[3],
+        "temporary failure",
+        base_delay_seconds=4,
+        max_delay_seconds=20,
+    ) is True
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT visible_at - clock_timestamp() FROM jobs WHERE id = %s",
+            (job[0],),
+        )
+        persisted_delay = cur.fetchone()[0].total_seconds()
+
+    assert bounds == [(2, 4)]
+    expected_delay = 2 if jitter_edge == "lower" else 4
+    assert abs(persisted_delay - expected_delay) < 0.5
+
+
+def test_fail_redacts_credentials_and_bounds_last_error(idempotency_key):
+    enqueue("send_email", {"user_id": 107}, idempotency_key)
+    job = claim("worker-1")
+    assert job is not None
+
+    secret_password = "db-pass-value-882"
+    secret_token = "bearer-token-value-229"
+    quoted_secret = "multi word private token 443"
+    secret_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signaturelongvalue"
+    raw_error = (
+        f"password={secret_password}; "
+        f'"refresh_token": "{quoted_secret}"; Bearer {secret_token}; '
+        f"postgresql://queue:{secret_password}@db/durableq; {secret_jwt}; "
+        + "x" * 400
+    )
+
+    assert fail(job[0], "worker-1", job[3], raw_error) is True
+
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT last_error FROM jobs WHERE id = %s", (job[0],))
+        stored_error = cur.fetchone()[0]
+
+    assert len(stored_error) <= queue_module.MAX_LAST_ERROR_LENGTH
+    assert secret_password not in stored_error
+    assert secret_token not in stored_error
+    assert quoted_secret not in stored_error
+    assert secret_jwt not in stored_error
+    assert "[REDACTED]" in stored_error
+
+
+def test_fail_rejects_expired_lease_without_reclaim(idempotency_key):
+    enqueue("send_email", {"user_id": 107}, idempotency_key)
+    job = claim("worker-1")
+    assert job is not None
+
+    expired_at = _expire_job(job[0])
+
+    assert (
+        fail(
+            job[0],
+            "worker-1",
+            job[3],
+            "late failure",
+        )
+        is False
+    )
+    assert _lease_job_state(job[0]) == (
+        "running",
+        job[3],
+        "worker-1",
+        None,
+        None,
+        expired_at,
+    )
 
 
 def test_fail_moves_exhausted_job_to_dead(idempotency_key):
@@ -882,6 +1120,110 @@ def test_stale_worker_cannot_extend_lease(idempotency_key):
     assert heartbeat(first[0], "worker-1", first[3], 60) is False
 
 
+def test_heartbeat_rejects_expired_lease_without_reclaim(idempotency_key):
+    enqueue("send_email", {"user_id": 605}, idempotency_key)
+    job = claim("worker-1", visibility_timeout_seconds=60)
+    assert job is not None
+
+    expired_at = _expire_job(job[0])
+
+    assert heartbeat(job[0], "worker-1", job[3], 60) is False
+    assert _lease_job_state(job[0]) == (
+        "running",
+        job[3],
+        "worker-1",
+        None,
+        None,
+        expired_at,
+    )
+
+
+@pytest.mark.parametrize("operation", ["heartbeat", "complete", "fail"])
+def test_lease_operation_rechecks_expiry_after_row_lock_wait(
+    idempotency_key, monkeypatch, operation
+):
+    enqueue("send_email", {"user_id": 606}, idempotency_key)
+    job = claim("worker-1", visibility_timeout_seconds=60)
+    assert job is not None
+
+    real_queue_connection = queue_module.get_connection
+    application_name = f"durableq-lease-lock-{uuid4().hex}"
+    waiter_connected = threading.Event()
+    waiter_pid = []
+
+    def tracked_queue_connection():
+        conn = real_queue_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT set_config('application_name', %s, false)",
+                (application_name,),
+            )
+            cur.execute("SELECT pg_backend_pid()")
+            waiter_pid.append(cur.fetchone()[0])
+        waiter_connected.set()
+        return conn
+
+    monkeypatch.setattr(queue_module, "get_connection", tracked_queue_connection)
+
+    def perform_operation():
+        if operation == "heartbeat":
+            return heartbeat(job[0], "worker-1", job[3], 60)
+        if operation == "complete":
+            return complete(job[0], "worker-1", job[3])
+        return fail(job[0], "worker-1", job[3], "late failure")
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with get_connection() as lock_conn:
+            with lock_conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM jobs WHERE id = %s FOR UPDATE",
+                    (job[0],),
+                )
+                assert cur.fetchone() == (job[0],)
+
+            operation_future = executor.submit(perform_operation)
+            assert waiter_connected.wait(timeout=5)
+
+            deadline = time.monotonic() + 5
+            lock_wait_observed = False
+            while time.monotonic() < deadline:
+                if operation_future.done():
+                    break
+
+                with get_connection() as monitor_conn, monitor_conn.cursor() as cur:
+                    cur.execute("SELECT pg_blocking_pids(%s)", (waiter_pid[0],))
+                    if cur.fetchone()[0]:
+                        lock_wait_observed = True
+                        break
+
+                threading.Event().wait(0.01)
+
+            assert lock_wait_observed, "operation did not block on the held row lock"
+
+            with lock_conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE jobs
+                    SET visible_at = clock_timestamp() - INTERVAL '1 second'
+                    WHERE id = %s
+                    RETURNING visible_at
+                    """,
+                    (job[0],),
+                )
+                expired_at = cur.fetchone()[0]
+
+        assert operation_future.result(timeout=5) is False
+
+    assert _lease_job_state(job[0]) == (
+        "running",
+        job[3],
+        "worker-1",
+        None,
+        None,
+        expired_at,
+    )
+
+
 def test_wrong_attempt_cannot_extend_lease(idempotency_key):
     enqueue("send_email", {"user_id": 603}, idempotency_key)
     job = claim("worker-1")
@@ -919,3 +1261,52 @@ def test_completed_job_lease_cannot_be_extended(idempotency_key):
 def test_heartbeat_rejects_invalid_inputs(kwargs):
     with pytest.raises(ValueError):
         heartbeat(**kwargs)
+
+
+def test_running_job_requires_worker_id():
+    with get_connection() as conn, conn.cursor() as cur:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            cur.execute("""
+                INSERT INTO jobs (job_type, payload, status)
+                VALUES ('send_email', '{"user_id": 1}', 'running')
+            """)
+
+
+def test_non_running_job_rejects_worker_id():
+    with get_connection() as conn, conn.cursor() as cur:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            cur.execute("""
+                INSERT INTO jobs (job_type, payload, status, worker_id)
+                VALUES ('send_email', '{"user_id": 1}', 'queued', 'worker-1')
+            """)
+
+
+def test_completed_job_requires_timestamp():
+    with get_connection() as conn, conn.cursor() as cur:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            cur.execute("""
+                INSERT INTO jobs (job_type, payload, status)
+                VALUES ('send_email', '{"user_id": 1}', 'completed')
+            """)
+
+
+def test_non_completed_job_rejects_completion_timestamp():
+    with get_connection() as conn, conn.cursor() as cur:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            cur.execute("""
+                INSERT INTO jobs (
+                    job_type, payload, status, completed_at
+                )
+                VALUES (
+                    'send_email', '{"user_id": 1}', 'queued', NOW()
+                )
+            """)
+
+
+def test_payload_must_be_json_object():
+    with get_connection() as conn, conn.cursor() as cur:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            cur.execute("""
+                INSERT INTO jobs (job_type, payload)
+                VALUES ('send_email', '[1, 2, 3]')
+            """)

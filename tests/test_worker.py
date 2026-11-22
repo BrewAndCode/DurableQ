@@ -1,16 +1,42 @@
-from app.worker import Worker, run_worker_with_signals
 import os
+import selectors
 import signal
 import subprocess
 import sys
 import threading
+import time
 from uuid import uuid4
 
 import pytest
 
 from app.database import get_connection
 from app.queue import enqueue
-from app.worker import Worker
+from app.worker import CancellableHandler, Worker, run_worker_with_signals
+
+
+def _wait_for_stdout_marker(process, marker, timeout):
+    if process.stdout is None:
+        return False
+
+    deadline = time.monotonic() + timeout
+    output = ""
+    with selectors.DefaultSelector() as selector:
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while time.monotonic() < deadline:
+            remaining = max(0, deadline - time.monotonic())
+            if not selector.select(remaining):
+                return False
+
+            chunk = os.read(process.stdout.fileno(), 4096)
+            if not chunk:
+                return False
+            output += chunk.decode(errors="replace")
+            if marker in output:
+                return True
+            if process.poll() is not None:
+                return False
+
+    return False
 
 
 @pytest.fixture(autouse=True)
@@ -87,8 +113,95 @@ def test_worker_fails_job_when_handler_raises(monkeypatch):
     assert result is True
     assert len(failed_jobs) == 1
     assert failed_jobs[0]["job_id"] == 2
-    assert failed_jobs[0]["error"] == "Email service unavailable"
+    assert failed_jobs[0]["error"] == (
+        "Handler raised RuntimeError; message and traceback omitted."
+    )
     assert completed_jobs == []
+
+
+def test_worker_does_not_log_or_store_handler_exception_details(
+    monkeypatch, caplog
+):
+    secret_payload_value = "customer-private-value-409"
+    secret_token = "api-token-super-secret-982"
+    failure_calls = []
+
+    monkeypatch.setattr(
+        "app.worker.claim",
+        lambda **kwargs: (
+            22,
+            "send_email",
+            {"customer": secret_payload_value},
+            1,
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.worker.fail",
+        lambda **kwargs: failure_calls.append(kwargs) or True,
+    )
+
+    def handler(payload):
+        raise RuntimeError(
+            f"request failed for {payload['customer']} with token={secret_token}"
+        )
+
+    worker = Worker("worker-safe-errors", {"send_email": handler})
+    assert worker.run_once() is True
+
+    stored_summary = failure_calls[0]["error"]
+    assert stored_summary == (
+        "Handler raised RuntimeError; message and traceback omitted."
+    )
+    assert secret_payload_value not in stored_summary
+    assert secret_token not in stored_summary
+    assert secret_payload_value not in caplog.text
+    assert secret_token not in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+@pytest.mark.parametrize("rejected_operation", ["complete", "fail"])
+def test_worker_logs_rejected_update_without_retrying_state_change(
+    monkeypatch, caplog, rejected_operation
+):
+    completion_calls = []
+    failure_calls = []
+
+    monkeypatch.setattr(
+        "app.worker.claim",
+        lambda **kwargs: (4, "send_email", {"user_id": 104}, 1, None),
+    )
+
+    def fake_complete(**kwargs):
+        completion_calls.append(kwargs)
+        return False
+
+    def fake_fail(**kwargs):
+        failure_calls.append(kwargs)
+        return False
+
+    def handler(payload):
+        if rejected_operation == "fail":
+            raise RuntimeError("Handler failed")
+
+    monkeypatch.setattr("app.worker.complete", fake_complete)
+    monkeypatch.setattr("app.worker.fail", fake_fail)
+
+    worker = Worker(
+        worker_id="worker-1",
+        handlers={"send_email": handler},
+    )
+
+    assert worker.run_once() is True
+
+    if rejected_operation == "complete":
+        assert len(completion_calls) == 1
+        assert failure_calls == []
+    else:
+        assert completion_calls == []
+        assert len(failure_calls) == 1
+
+    assert "rejected by lease or fencing checks" in caplog.text
 
 
 def test_worker_fails_job_when_handler_is_missing(monkeypatch):
@@ -114,7 +227,7 @@ def test_worker_fails_job_when_handler_is_missing(monkeypatch):
     assert result is True
     assert len(failed_jobs) == 1
     assert failed_jobs[0]["job_id"] == 3
-    assert "No handler registered" in failed_jobs[0]["error"]
+    assert failed_jobs[0]["error"].startswith("Handler raised ValueError")
 
 
 def test_worker_stop_sets_stop_event():
@@ -193,7 +306,9 @@ def test_worker_failure_updates_real_database():
     assert result is True
     assert status == "queued"
     assert attempts == 1
-    assert last_error == "Email service unavailable"
+    assert last_error == (
+        "Handler raised RuntimeError; message and traceback omitted."
+    )
     assert worker_id is None
 
 
@@ -261,7 +376,10 @@ def test_worker_renews_heartbeat_during_long_running_job(monkeypatch):
 
 def test_worker_handles_lost_heartbeat_lease(monkeypatch):
     heartbeat_called = threading.Event()
+    cancellation_observed = threading.Event()
+    cancellation_events = []
     completion_calls = []
+    failure_calls = []
 
     def fake_claim(**kwargs):
         return (11, "send_email", {"user_id": 111}, 1, None)
@@ -272,31 +390,135 @@ def test_worker_handles_lost_heartbeat_lease(monkeypatch):
 
     def fake_complete(**kwargs):
         completion_calls.append(kwargs)
-        return False
 
-    def handler(payload):
+    def fake_fail(**kwargs):
+        failure_calls.append(kwargs)
+
+    def handler(payload, cancel_event):
+        cancellation_events.append(cancel_event)
         assert heartbeat_called.wait(timeout=3)
+        assert cancel_event.wait(timeout=3)
+        cancellation_observed.set()
 
     monkeypatch.setattr("app.worker.claim", fake_claim)
     monkeypatch.setattr("app.worker.heartbeat", fake_heartbeat)
     monkeypatch.setattr("app.worker.complete", fake_complete)
+    monkeypatch.setattr("app.worker.fail", fake_fail)
 
     worker = Worker(
         worker_id="worker-1",
-        handlers={"send_email": handler},
+        handlers={"send_email": CancellableHandler(handler)},
         visibility_timeout_seconds=1,
     )
 
     result = worker.run_once()
 
     assert result is True
-    assert len(completion_calls) == 1
-    assert completion_calls[0]["job_id"] == 11
+    assert cancellation_observed.is_set()
+    assert len(cancellation_events) == 1
+    assert cancellation_events[0].is_set()
+    assert completion_calls == []
+    assert failure_calls == []
+
+
+def test_worker_cancels_handler_and_skips_updates_when_heartbeat_raises(
+    monkeypatch, caplog
+):
+    heartbeat_called = threading.Event()
+    cancellation_observed = threading.Event()
+    completion_calls = []
+    failure_calls = []
+
+    def fake_claim(**kwargs):
+        return (12, "send_email", {"user_id": 112}, 1, None)
+
+    def fake_heartbeat(**kwargs):
+        heartbeat_called.set()
+        raise TimeoutError("database timeout containing sensitive-token")
+
+    def fake_complete(**kwargs):
+        completion_calls.append(kwargs)
+
+    def fake_fail(**kwargs):
+        failure_calls.append(kwargs)
+
+    def handler(payload, cancel_event):
+        assert heartbeat_called.wait(timeout=3)
+        assert cancel_event.wait(timeout=3)
+        cancellation_observed.set()
+        raise RuntimeError("Handler stopped after lease loss")
+
+    monkeypatch.setattr("app.worker.claim", fake_claim)
+    monkeypatch.setattr("app.worker.heartbeat", fake_heartbeat)
+    monkeypatch.setattr("app.worker.complete", fake_complete)
+    monkeypatch.setattr("app.worker.fail", fake_fail)
+
+    worker = Worker(
+        worker_id="worker-1",
+        handlers={"send_email": CancellableHandler(handler)},
+        visibility_timeout_seconds=1,
+    )
+
+    result = worker.run_once()
+
+    assert result is True
+    assert cancellation_observed.is_set()
+    assert completion_calls == []
+    assert failure_calls == []
+    assert "sensitive-token" not in caplog.text
+    assert "TimeoutError" in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+def test_worker_does_not_wait_indefinitely_for_heartbeat_thread(
+    monkeypatch, caplog
+):
+    heartbeat_started = threading.Event()
+    release_heartbeat = threading.Event()
+    heartbeat_finished = threading.Event()
+    completion_calls = []
+
+    monkeypatch.setattr(
+        "app.worker.claim",
+        lambda **kwargs: (13, "send_email", {}, 1, None),
+    )
+    monkeypatch.setattr(
+        "app.worker.HEARTBEAT_THREAD_JOIN_TIMEOUT_SECONDS",
+        0.01,
+    )
+
+    def fake_heartbeat(**kwargs):
+        heartbeat_started.set()
+        release_heartbeat.wait()
+        heartbeat_finished.set()
+        return True
+
+    monkeypatch.setattr("app.worker.heartbeat", fake_heartbeat)
+    monkeypatch.setattr(
+        "app.worker.complete",
+        lambda **kwargs: completion_calls.append(kwargs) or True,
+    )
+    worker = Worker(
+        "worker-bounded-heartbeat",
+        {"send_email": lambda payload: heartbeat_started.wait(timeout=2)},
+        visibility_timeout_seconds=1,
+    )
+
+    try:
+        assert worker.run_once() is True
+        assert completion_calls
+        assert "did not stop before the join deadline" in caplog.text
+        assert not heartbeat_finished.is_set()
+    finally:
+        release_heartbeat.set()
+
+    assert heartbeat_finished.wait(timeout=2)
 
 
 def test_worker_finishes_active_job_before_stopping(monkeypatch):
     handler_started = threading.Event()
     release_handler = threading.Event()
+    cancellation_events = []
     completed_jobs = []
 
     def fake_claim(**kwargs):
@@ -306,7 +528,8 @@ def test_worker_finishes_active_job_before_stopping(monkeypatch):
         completed_jobs.append(kwargs)
         return True
 
-    def handler(payload):
+    def handler(payload, cancel_event):
+        cancellation_events.append(cancel_event)
         handler_started.set()
         assert release_handler.wait(timeout=3)
 
@@ -315,7 +538,7 @@ def test_worker_finishes_active_job_before_stopping(monkeypatch):
 
     worker = Worker(
         worker_id="worker-1",
-        handlers={"send_email": handler},
+        handlers={"send_email": CancellableHandler(handler)},
     )
 
     thread = threading.Thread(target=worker.run_forever)
@@ -326,11 +549,13 @@ def test_worker_finishes_active_job_before_stopping(monkeypatch):
     worker.stop()
 
     assert thread.is_alive()
+    assert cancellation_events[0].is_set() is False
 
     release_handler.set()
     thread.join(timeout=3)
 
     assert not thread.is_alive()
+    assert cancellation_events[0].is_set() is False
     assert len(completed_jobs) == 1
     assert completed_jobs[0]["job_id"] == 20
 
@@ -542,19 +767,11 @@ run_worker_with_signals(worker)
     )
 
     try:
-        started = False
-
-        for _ in range(100):
-            line = process.stdout.readline()
-
-            if "HANDLER_STARTED" in line:
-                started = True
-                break
-
-            if process.poll() is not None:
-                break
-
-        assert started, "Worker handler did not start"
+        assert _wait_for_stdout_marker(
+            process,
+            "HANDLER_STARTED",
+            timeout=5,
+        ), "Worker handler did not start"
 
         process.send_signal(signal.SIGTERM)
 
@@ -565,7 +782,7 @@ run_worker_with_signals(worker)
     finally:
         if process.poll() is None:
             process.kill()
-            process.wait(timeout=5)
+            process.communicate(timeout=5)
 
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -580,17 +797,20 @@ run_worker_with_signals(worker)
 
 def test_worker_handles_sigint_and_exits_cleanly():
     child_code = """
-import time
-
 from app.worker import Worker, run_worker_with_signals
 
-worker = Worker(
+class ReadyWorker(Worker):
+    def run_forever(self):
+        # run_worker_with_signals installs handlers before this method runs.
+        print("WORKER_SIGNALS_READY", flush=True)
+        super().run_forever()
+
+worker = ReadyWorker(
     worker_id="sigint-worker",
     handlers={"send_email": lambda payload: None},
     poll_interval_seconds=0.1,
 )
 
-print("WORKER_READY", flush=True)
 run_worker_with_signals(worker)
 """
 
@@ -603,19 +823,11 @@ run_worker_with_signals(worker)
     )
 
     try:
-        ready = False
-
-        for _ in range(100):
-            line = process.stdout.readline()
-
-            if "WORKER_READY" in line:
-                ready = True
-                break
-
-            if process.poll() is not None:
-                break
-
-        assert ready, "Worker did not start"
+        assert _wait_for_stdout_marker(
+            process,
+            "WORKER_SIGNALS_READY",
+            timeout=5,
+        ), "Worker signal handlers were not installed before readiness"
 
         process.send_signal(signal.SIGINT)
 
@@ -626,4 +838,4 @@ run_worker_with_signals(worker)
     finally:
         if process.poll() is None:
             process.kill()
-            process.wait(timeout=5)
+            process.communicate(timeout=5)

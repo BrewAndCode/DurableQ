@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      TEST_DATABASE_URL: postgresql://durableq_ci:durableq_test_password@127.0.0.1:5432/durableq_test
+      TEST_DATABASE_ALLOWED_HOSTS: 127.0.0.1
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: durableq_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: durableq_admin_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d durableq_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install locked dependencies
+        run: python -m pip install -r requirements-ci.lock
+
+      - name: Create dedicated test role
+        env:
+          POSTGRES_ADMIN_URL: postgresql://postgres:durableq_admin_password@127.0.0.1:5432/postgres
+          DURABLEQ_TEST_PASSWORD: durableq_test_password
+        run: |
+          python - <<'PY'
+          import os
+
+          import psycopg
+          from psycopg import sql
+          from psycopg.conninfo import make_conninfo
+
+          admin_url = os.environ["POSTGRES_ADMIN_URL"]
+          test_password = os.environ["DURABLEQ_TEST_PASSWORD"]
+
+          with psycopg.connect(admin_url, autocommit=True) as conn:
+              conn.execute(
+                  sql.SQL("CREATE ROLE {} LOGIN CREATEDB PASSWORD {}").format(
+                      sql.Identifier("durableq_ci"), sql.Literal(test_password)
+                  )
+              )
+              conn.execute(
+                  "GRANT ALL PRIVILEGES ON DATABASE durableq_test TO durableq_ci"
+              )
+
+          test_admin_url = make_conninfo(admin_url, dbname="durableq_test")
+          with psycopg.connect(test_admin_url, autocommit=True) as conn:
+              conn.execute(
+                  "GRANT USAGE, CREATE ON SCHEMA public TO durableq_ci"
+              )
+          PY
+
+      - name: Initialize test schema
+        run: DATABASE_URL="$TEST_DATABASE_URL" python -c "from app.migrate import run_migrations; run_migrations()"
+
+      - name: Run full test suite
+        run: python -m pytest

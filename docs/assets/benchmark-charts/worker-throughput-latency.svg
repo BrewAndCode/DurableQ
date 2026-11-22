@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="700" viewBox="0 0 1240 700" role="img" aria-labelledby="title desc">
+<title id="title">DurableQ worker throughput and latency</title>
+<desc id="desc">Median completed jobs per second and median per-run p50, p95, and p99 completion latency by worker thread count.</desc>
+<rect width="1240" height="700" rx="16" fill="#ffffff"/>
+<style>text{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}</style>
+<text x="55" y="50" font-size="27" fill="#172b4d" text-anchor="start" font-weight="bold">Worker throughput and latency</text>
+<text x="55" y="80" font-size="15" fill="#526581" text-anchor="start" font-weight="normal">Worker instances run as threads in one process · medians across repetitions</text>
+<line x1="90" y1="520" x2="570" y2="520" stroke="#d8e0eb"/>
+<text x="78" y="525" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">0</text>
+<line x1="90" y1="445" x2="570" y2="445" stroke="#d8e0eb"/>
+<text x="78" y="450" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">100</text>
+<line x1="90" y1="370" x2="570" y2="370" stroke="#d8e0eb"/>
+<text x="78" y="375" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">200</text>
+<line x1="90" y1="295" x2="570" y2="295" stroke="#d8e0eb"/>
+<text x="78" y="300" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">300</text>
+<line x1="90" y1="220" x2="570" y2="220" stroke="#d8e0eb"/>
+<text x="78" y="225" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">400</text>
+<line x1="90" y1="145" x2="570" y2="145" stroke="#d8e0eb"/>
+<text x="78" y="150" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">500</text>
+<text x="330" y="118" font-size="18" fill="#172b4d" text-anchor="middle" font-weight="bold">Completed-job throughput</text>
+<text x="330" y="560" font-size="15" fill="#526581" text-anchor="middle" font-weight="normal">Worker threads</text>
+<text x="24" y="332.5" transform="rotate(-90 24 332.5)" font-size="15" fill="#526581" text-anchor="middle">Jobs/second</text>
+<rect x="123" y="397.54" width="54" height="122.46" rx="6" fill="#dce8ff"/>
+<circle cx="140" cy="396.52" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="150" cy="397.81" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="160" cy="397.54" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<text x="150" y="385.54" font-size="13" fill="#7253b5" text-anchor="middle" font-weight="bold">163.3</text>
+<text x="150" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">1</text>
+<rect x="243" y="222.39" width="54" height="297.61" rx="6" fill="#dce8ff"/>
+<circle cx="260" cy="211.34" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="270" cy="222.39" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="280" cy="239.6" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<text x="270" y="210.39" font-size="13" fill="#7253b5" text-anchor="middle" font-weight="bold">396.8</text>
+<text x="270" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">5</text>
+<rect x="363" y="260.26" width="54" height="259.74" rx="6" fill="#dce8ff"/>
+<circle cx="380" cy="263.95" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="390" cy="256.94" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="400" cy="260.26" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<text x="390" y="248.26" font-size="13" fill="#7253b5" text-anchor="middle" font-weight="bold">346.3</text>
+<text x="390" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">10</text>
+<rect x="483" y="259.9" width="54" height="260.1" rx="6" fill="#dce8ff"/>
+<circle cx="500" cy="254.33" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="510" cy="264.89" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="520" cy="259.9" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<text x="510" y="247.9" font-size="13" fill="#7253b5" text-anchor="middle" font-weight="bold">346.8</text>
+<text x="510" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">20</text>
+<line x1="720" y1="520" x2="1160" y2="520" stroke="#d8e0eb"/>
+<text x="708" y="525" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">0k</text>
+<line x1="720" y1="466.43" x2="1160" y2="466.43" stroke="#d8e0eb"/>
+<text x="708" y="471.43" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">5k</text>
+<line x1="720" y1="412.86" x2="1160" y2="412.86" stroke="#d8e0eb"/>
+<text x="708" y="417.86" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">10k</text>
+<line x1="720" y1="359.29" x2="1160" y2="359.29" stroke="#d8e0eb"/>
+<text x="708" y="364.29" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">15k</text>
+<line x1="720" y1="305.71" x2="1160" y2="305.71" stroke="#d8e0eb"/>
+<text x="708" y="310.71" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">20k</text>
+<line x1="720" y1="252.14" x2="1160" y2="252.14" stroke="#d8e0eb"/>
+<text x="708" y="257.14" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">25k</text>
+<line x1="720" y1="198.57" x2="1160" y2="198.57" stroke="#d8e0eb"/>
+<text x="708" y="203.57" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">30k</text>
+<line x1="720" y1="145" x2="1160" y2="145" stroke="#d8e0eb"/>
+<text x="708" y="150" font-size="12" fill="#526581" text-anchor="end" font-weight="normal">35k</text>
+<text x="940" y="118" font-size="18" fill="#172b4d" text-anchor="middle" font-weight="bold">Enqueue-to-completion latency</text>
+<text x="940" y="560" font-size="15" fill="#526581" text-anchor="middle" font-weight="normal">Worker threads</text>
+<text x="650" y="332.5" transform="rotate(-90 650 332.5)" font-size="15" fill="#526581" text-anchor="middle">Latency (milliseconds)</text>
+<text x="720" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">1</text>
+<text x="866.67" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">5</text>
+<text x="1013.33" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">10</text>
+<text x="1160" y="543" font-size="14" fill="#526581" text-anchor="middle" font-weight="normal">20</text>
+<polyline points="720,295.64 866.67,396.1 1013.33,384.98 1160,386.12" fill="none" stroke="#2864dc" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="720" cy="295.64" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="866.67" cy="396.1" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="1013.33" cy="384.98" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<circle cx="1160" cy="386.12" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<polyline points="720,202.1 866.67,386.62 1013.33,367.54 1160,367.59" fill="none" stroke="#db6b26" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="720" cy="202.1" r="5" fill="#db6b26" stroke="#ffffff" stroke-width="2"/>
+<circle cx="866.67" cy="386.62" r="5" fill="#db6b26" stroke="#ffffff" stroke-width="2"/>
+<circle cx="1013.33" cy="367.54" r="5" fill="#db6b26" stroke="#ffffff" stroke-width="2"/>
+<circle cx="1160" cy="367.59" r="5" fill="#db6b26" stroke="#ffffff" stroke-width="2"/>
+<polyline points="720,194.06 866.67,385.23 1013.33,365.79 1160,366.12" fill="none" stroke="#21845b" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="720" cy="194.06" r="5" fill="#21845b" stroke="#ffffff" stroke-width="2"/>
+<circle cx="866.67" cy="385.23" r="5" fill="#21845b" stroke="#ffffff" stroke-width="2"/>
+<circle cx="1013.33" cy="365.79" r="5" fill="#21845b" stroke="#ffffff" stroke-width="2"/>
+<circle cx="1160" cy="366.12" r="5" fill="#21845b" stroke="#ffffff" stroke-width="2"/>
+<line x1="395" y1="615" x2="419" y2="615" stroke="#2864dc" stroke-width="3"/>
+<text x="427" y="620" font-size="14" fill="#526581" text-anchor="start" font-weight="normal">p50</text>
+<line x1="505" y1="615" x2="529" y2="615" stroke="#db6b26" stroke-width="3"/>
+<text x="537" y="620" font-size="14" fill="#526581" text-anchor="start" font-weight="normal">p95</text>
+<line x1="615" y1="615" x2="639" y2="615" stroke="#21845b" stroke-width="3"/>
+<text x="647" y="620" font-size="14" fill="#526581" text-anchor="start" font-weight="normal">p99</text>
+<circle cx="840" cy="615" r="5" fill="#2864dc" stroke="#ffffff" stroke-width="2"/>
+<text x="854" y="620" font-size="14" fill="#526581" text-anchor="start" font-weight="normal">throughput run</text>
+<text x="55" y="665" font-size="13" fill="#526581" text-anchor="start" font-weight="normal">Latency uses PostgreSQL completed_at − created_at; the batch was enqueued before workers started.</text>
+</svg>

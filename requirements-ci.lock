@@ -1,0 +1,11 @@
+# Runtime and test dependency lock resolved in a clean Python 3.13 environment.
+# Keep direct and transitive packages pinned so CI installs without resolving
+# unpinned dependencies from the package index.
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.7.0
+psycopg[binary]==3.3.9
+psycopg-binary==3.3.9
+Pygments==2.21.0
+pytest==9.2.0
+python-dotenv==1.2.4
